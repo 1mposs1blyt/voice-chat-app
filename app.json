@@ -43,6 +43,16 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "INTERNET",
+        "MODIFY_AUDIO_SETTINGS"
+      ],
+      "gradleArguments": [
+        "-PreactNativeArchitectures=arm64-v8a"
+      ],
       "package": "com.alex.myapp"
     },
     "extra": {
