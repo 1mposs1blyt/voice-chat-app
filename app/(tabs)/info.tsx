@@ -52,7 +52,6 @@ export default function InfoScreen() {
 			setTimeout(() => {
 				setStatus('Готов');
 			}, 2000)
-			setStatus('Готов');
 		} else {
 			setStatus('Записей нет');
 		}
