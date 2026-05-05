@@ -15,7 +15,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -37,6 +38,9 @@
       "bundleIdentifier": "com.alex.myapp"
     },
     "android": {
+      "gradleArguments": [
+        "-PreactNativeArchitectures=arm64-v8a"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -48,6 +52,12 @@
       "eas": {
         "projectId": "0bfb35ec-7a46-4cc2-8b53-96bcba8213df"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0bfb35ec-7a46-4cc2-8b53-96bcba8213df"
     }
   }
 }
