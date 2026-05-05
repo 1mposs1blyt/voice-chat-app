@@ -17,7 +17,8 @@
       "expo-router",
       "expo-font",
       "expo-audio",
-      "expo-asset"
+      "expo-asset",
+      "@cjblack/expo-audio-stream"
     ],
     "experiments": {
       "typedRoutes": true,
