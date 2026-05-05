@@ -16,7 +16,8 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-audio"
+      "expo-audio",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -38,9 +39,6 @@
       "bundleIdentifier": "com.alex.myapp"
     },
     "android": {
-      "gradleArguments": [
-        "-PreactNativeArchitectures=arm64-v8a"
-      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
