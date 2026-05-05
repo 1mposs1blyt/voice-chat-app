@@ -9,11 +9,11 @@ let TcpSocket: any = null;
 let ExpoPlayAudioStream: any = null;
 
 try {
-    TcpSocket = require('react-native-tcp-socket');
-    const StreamModule = require('@cjblack/expo-audio-stream');
-    ExpoPlayAudioStream = StreamModule.ExpoPlayAudioStream;
+	TcpSocket = require('react-native-tcp-socket');
+	const StreamModule = require('@cjblack/expo-audio-stream');
+	ExpoPlayAudioStream = StreamModule.ExpoPlayAudioStream;
 } catch (e) {
-    console.warn("Нативные модули не найдены. Работаем в режиме Expo Go.");
+	console.warn("Нативные модули не найдены. Работаем в режиме Expo Go.");
 }
 
 export default function InfoScreen() {
@@ -49,6 +49,10 @@ export default function InfoScreen() {
 			setStatus('Воспроизведение...');
 			await player.replace(recorder.uri);
 			player.play();
+			setTimeout(() => {
+				setStatus('Готов');
+			}, 2000)
+			setStatus('Готов');
 		} else {
 			setStatus('Записей нет');
 		}
@@ -95,7 +99,7 @@ export default function InfoScreen() {
 	return (
 		<View style={{ flex: 1, backgroundColor: '#064e3b', padding: 20 }}>
 			<Stack.Screen options={{ title: 'Рация' }} />
-			
+
 			<View style={{ marginTop: 50, backgroundColor: '#065f46', padding: 20, borderRadius: 15 }}>
 				<Text style={{ color: 'white', fontSize: 18 }}>Статус: {status}</Text>
 				<TextInput
@@ -127,14 +131,14 @@ export default function InfoScreen() {
 
 				{/* ВОТ ОНА — ВОЗВРАЩЕННАЯ КНОПКА */}
 				{recorder.uri && !isRecording && (
-					<TouchableOpacity 
-						onPress={playLast} 
-						style={{ 
-							marginTop: 40, 
-							padding: 15, 
-							backgroundColor: '#3b82f6', 
-							borderRadius: 12, 
-							alignItems: 'center' 
+					<TouchableOpacity
+						onPress={playLast}
+						style={{
+							marginTop: 40,
+							padding: 15,
+							backgroundColor: '#3b82f6',
+							borderRadius: 12,
+							alignItems: 'center'
 						}}
 					>
 						<Text style={{ color: 'white', fontWeight: '600' }}>▶ Прослушать запись</Text>
@@ -142,11 +146,11 @@ export default function InfoScreen() {
 				)}
 			</View>
 
-            {!ExpoPlayAudioStream && (
-                <Text style={{ color: '#fca5a5', textAlign: 'center', marginTop: 20, fontSize: 12 }}>
-                    ⚠ Режим Expo Go. Сеть отключена.
-                </Text>
-            )}
+			{!ExpoPlayAudioStream && (
+				<Text style={{ color: '#fca5a5', textAlign: 'center', marginTop: 20, fontSize: 12 }}>
+					⚠ Режим Expo Go. Сеть отключена.
+				</Text>
+			)}
 		</View>
 	);
 }
