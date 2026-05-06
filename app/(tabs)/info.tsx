@@ -58,15 +58,27 @@ export default function InfoScreen() {
 	};
 
 	const startTalk = async () => {
-		const permission = await Audio.requestRecordingPermissionsAsync();
-		if (!permission.granted) return;
+		const { granted } = await Audio.requestRecordingPermissionsAsync();
+		if (!granted) {
+			setStatus('Микрофон запрещен!');
+			return;
+		}
 
 		try {
-			setIsRecording(true);
-			setStatus(ExpoPlayAudioStream ? 'В ЭФИРЕ' : 'ЗАПИСЬ (Expo Go)');
+			if (!recorder.isRecording) {
+				setIsRecording(true);
+				setStatus(ExpoPlayAudioStream ? 'В ЭФИРЕ' : 'ЗАПИСЬ (Expo Go)');
 
-			await recorder.prepareToRecordAsync();
-			recorder.record();
+				// В новых версиях expo-audio используем try-catch для подготовки
+				try {
+					await recorder.prepareToRecordAsync();
+				} catch (err) {
+					// Если уже подготовлен, просто игнорируем ошибку и идем дальше
+					console.log('Рекордер уже был готов');
+				}
+
+				recorder.record();
+			}
 
 			if (ExpoPlayAudioStream && udpSocket && targetIp) {
 				const stream = await ExpoPlayAudioStream.startRecording({
@@ -78,23 +90,69 @@ export default function InfoScreen() {
 				stopStreamRef.current = stream;
 			}
 		} catch (e) {
+			console.error('Start Error:', e);
 			setStatus('Ошибка старта');
 			setIsRecording(false);
 		}
 	};
 
+
 	const stopTalk = async () => {
+		// Если статус записи false, значит мы даже не начинали из-за прав
+		if (!isRecording) return;
+
 		setIsRecording(false);
 		setStatus('Готов');
+
 		try {
-			await recorder.stop();
+			// Проверяем, действительно ли рекордер записывает перед тем как стопать
+			if (recorder.isRecording) {
+				await recorder.stop();
+			}
+
 			if (stopStreamRef.current && stopStreamRef.current.stop) {
 				stopStreamRef.current.stop();
 				stopStreamRef.current = null;
 			}
-		} catch (e) { console.log('Stop Error:', e); }
+		} catch (e) {
+			console.log('Stop Error:', e);
+		}
 	};
+	useEffect(() => {
+		Audio.setAudioModeAsync({
+			allowsRecording: true,
+			playsInSilentMode: true,
+			shouldRouteThroughEarpiece: false,
+		});
 
+		if (TcpSocket && TcpSocket.createSocket) {
+			try {
+				const s = TcpSocket.createSocket({ type: 'udp4' });
+
+				// --- ПРИЕМ ДАННЫХ ---
+				s.on('message', (msg: string, rinfo: any) => {
+					console.log(`Получен пакет размером ${msg.length} от ${rinfo.address}`);
+					if (ExpoPlayAudioStream) {
+						try {
+							// Попробуй один из этих вариантов (зависит от точной версии):
+							if (ExpoPlayAudioStream.play) {
+								ExpoPlayAudioStream.play(msg);
+							} else if (ExpoPlayAudioStream.push) {
+								ExpoPlayAudioStream.push(msg);
+							}
+							setStatus(`Прием: ${rinfo.address}`);
+						} catch (err) {
+							console.error('Ошибка воспроизведения чанка:', err);
+						}
+					}
+				});
+
+				s.bind(12345);
+				setUdpSocket(s);
+				return () => { if (s && s.close) s.close(); };
+			} catch (e) { console.log('Socket Init Error:', e); }
+		}
+	}, []);
 	return (
 		<View style={{ flex: 1, backgroundColor: '#064e3b', padding: 20 }}>
 			<Stack.Screen options={{ title: 'Рация' }} />

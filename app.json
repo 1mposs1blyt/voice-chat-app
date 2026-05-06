@@ -46,8 +46,6 @@
       },
       "permissions": [
         "RECORD_AUDIO",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
         "INTERNET",
         "MODIFY_AUDIO_SETTINGS",
         "android.permission.RECORD_AUDIO",
