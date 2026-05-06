@@ -1,70 +1,47 @@
 {
   "expo": {
-    "name": "my-app",
-    "slug": "my-app",
+    "name": "voice-chat-app",
+    "slug": "voice-chat-app",
     "version": "1.0.0",
-    "scheme": "my-app",
-    "platforms": [
-      "ios",
-      "android"
-    ],
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/favicon.png"
-    },
-    "plugins": [
-      "expo-router",
-      "expo-font",
-      "expo-audio",
-      "expo-asset",
-      "@cjblack/expo-audio-stream"
-    ],
-    "experiments": {
-      "typedRoutes": true,
-      "tsconfigPaths": true
-    },
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.alex.myapp"
+      "bundleIdentifier": "com.anonymous.voicechatapp",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Приложению нужен доступ к микрофону для работы рации между байкерами.",
+        "NSLocalNetworkUsageDescription": "Нужен доступ к локальной сети для поиска других устройств без интернета.",
+        "NSBonjourServices": ["_moto-intercom._udp.local."]
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "RECORD_AUDIO",
-        "INTERNET",
-        "MODIFY_AUDIO_SETTINGS",
         "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS"
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_MULTICAST_STATE",
+        "android.permission.INTERNET"
       ],
-      "package": "com.alex.myapp"
+      "package": "com.anonymous.voicechatapp"
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "d327c729-9c35-46a4-b862-2278688e9df1"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/0bfb35ec-7a46-4cc2-8b53-96bcba8213df"
-    },
-    "owner": "vamfykqvqwlpejrgkh"
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-webrtc",
+        {
+          "appleMicrophonePermission": "Приложению нужен доступ к микрофону для работы рации."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }
