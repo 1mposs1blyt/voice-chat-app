@@ -14,9 +14,10 @@
   "dependencies": {
     "buffer": "^6.0.3",
     "expo": "~52.0.25",
-    "expo-audio": "^55.0.14",
+    "expo-asset": "~11.0.5",
+    "expo-audio": "~0.3.5",
     "expo-constants": "~17.0.3",
-    "expo-dev-client": "^55.0.32",
+    "expo-dev-client": "~5.0.20",
     "expo-linking": "~7.0.4",
     "expo-router": "~4.0.16",
     "expo-status-bar": "~2.0.1",
@@ -35,7 +36,21 @@
   "devDependencies": {
     "@types/react": "~18.3.12",
     "@types/react-native-zeroconf": "^0.13.1",
+    "metro": "^0.81.0",
+    "metro-config": "^0.81.0",
+    "metro-resolver": "^0.81.0",
     "typescript": "^5.3.3"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-udp",
+          "react-native-webrtc",
+          "buffer"
+        ]
+      }
+    }
+  }
 }
