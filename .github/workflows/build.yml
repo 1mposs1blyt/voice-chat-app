@@ -64,7 +64,7 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          GRADLE_OPTS: "-Dorg.gradle.console=plain"
+          GRADLE_OPTS: "-Dorg.gradle.console=plain -Pkotlin.plugin.suppressKotlinVersionCompatibilityCheck=true"
 
       - name: 📁 Upload Artifact
         uses: actions/upload-artifact@v4

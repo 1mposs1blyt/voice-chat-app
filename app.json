@@ -44,15 +44,11 @@
         "expo-build-properties",
         {
           "android": {
+            "kotlinVersion": "1.9.24",
             "minSdkVersion": 24,
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "kotlinVersion": "1.9.24",
-            "packagingOptions": {
-              "pickFirst": [
-                "**/libc++_shared.so"
-              ]
-            }
+            "buildToolsVersion": "35.0.0"
           }
         }
       ]
