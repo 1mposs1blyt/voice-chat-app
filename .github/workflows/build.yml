@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '17' # Самая стабильная для RN 0.76
 
       - name: 🛠 Setup Expo
         uses: expo/expo-github-action@v8
@@ -51,7 +51,6 @@ jobs:
       - name: 🚀 Build Android
         run: |
           bun install -g eas-cli
-          # Используем профиль из выбранного при запуске
           eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
@@ -59,7 +58,6 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          JAVA_HOME: /usr/lib/jvm/temurin-21-jdk-amd64
 
       - name: 📁 Upload Artifact
         uses: actions/upload-artifact@v4
