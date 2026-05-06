@@ -4,7 +4,7 @@
     "slug": "voice-chat-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -14,31 +14,33 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Приложению нужен доступ к микрофону для работы рации между байкерами.",
         "NSLocalNetworkUsageDescription": "Нужен доступ к локальной сети для поиска других устройств без интернета.",
-        "NSBonjourServices": ["_moto-intercom._udp.local."]
+        "NSBonjourServices": [
+          "_moto-intercom._udp.local."
+        ]
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.MODIFY_AUDIO_SETTINGS",
-        "android.permission.ACCESS_WIFI_STATE",
-        "android.permission.CHANGE_WIFI_MULTICAST_STATE",
-        "android.permission.INTERNET"
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_MULTICAST_STATE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "NEARBY_WIFI_DEVICES"
       ],
       "package": "com.anonymous.voicechatapp"
     },
     "plugins": [
       "expo-router",
-      [
-        "react-native-webrtc",
-        {
-          "appleMicrophonePermission": "Приложению нужен доступ к микрофону для работы рации."
-        }
-      ]
+      "expo-font",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
