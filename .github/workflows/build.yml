@@ -1,6 +1,16 @@
-name: Build Android Dev
+name: Build Android (Manual)
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Выберите профиль сборки'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
 
 jobs:
   build:
@@ -38,11 +48,11 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
 
-      - name: 🚀 Build Development APK
+      - name: 🚀 Build Android
         run: |
-          # Устанавливаем eas-cli локально для надежности и запускаем сборку
           bun install -g eas-cli
-          eas build --platform android --local --profile development --non-interactive --clear-cache
+          # Используем профиль из выбранного при запуске
+          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -53,5 +63,5 @@ jobs:
       - name: 📁 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dev-build-apk
+          name: ${{ github.event.inputs.profile }}-apk
           path: ./*.apk
