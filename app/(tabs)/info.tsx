@@ -4,16 +4,16 @@ import { Stack } from 'expo-router';
 import * as Audio from 'expo-audio';
 import * as FileSystem from 'expo-file-system';
 
-// --- БЛОК ИСКЛЮЧЕНИЙ ДЛЯ EXPO GO ---
-let TcpSocket: any = null;
-let ExpoPlayAudioStream: any = null;
+// Используем require, чтобы не ругался TS
+const TcpSocket = require('react-native-tcp-socket');
+const createSocket = TcpSocket.createSocket;
 
+let ExpoPlayAudioStream: any = null;
 try {
-	TcpSocket = require('react-native-tcp-socket');
 	const StreamModule = require('@cjblack/expo-audio-stream');
-	ExpoPlayAudioStream = StreamModule.ExpoPlayAudioStream;
+	ExpoPlayAudioStream = StreamModule.ExpoPlayAudioStream || StreamModule;
 } catch (e) {
-	console.warn("Нативные модули не найдены. Работаем в режиме Expo Go.");
+	console.log("Стриминг недоступен в Expo Go");
 }
 
 export default function InfoScreen() {
@@ -23,9 +23,10 @@ export default function InfoScreen() {
 	const [udpSocket, setUdpSocket] = useState<any>(null);
 
 	const recorder = Audio.useAudioRecorder(Audio.RecordingPresets.HIGH_QUALITY);
-	const player = Audio.useAudioPlayer(recorder.uri); // Плеер привязан к URI рекордера
+	const player = Audio.useAudioPlayer(recorder.uri);
 	const stopStreamRef = useRef<any>(null);
 
+	// 1. Инициализация аудио и СОКЕТА (Прием + Пинг)
 	useEffect(() => {
 		Audio.setAudioModeAsync({
 			allowsRecording: true,
@@ -33,27 +34,75 @@ export default function InfoScreen() {
 			shouldRouteThroughEarpiece: false,
 		});
 
-		if (TcpSocket && TcpSocket.createSocket) {
+		if (typeof createSocket === 'function') {
 			try {
-				const s = TcpSocket.createSocket({ type: 'udp4' });
+				const s = createSocket({ type: 'udp4' });
+
+				// ОБРАБОТКА ВХОДЯЩИХ (Пинг и Звук)
+				s.on('message', (msg: any, rinfo: any) => {
+					const data = msg.toString();
+
+					if (data === 'CHECK_PING') {
+						s.send('CHECK_PONG', 0, 10, 12345, rinfo.address);
+						return;
+					}
+					if (data === 'CHECK_PONG') {
+						setStatus(`Связь с ${rinfo.address} ОК!`);
+						return;
+					}
+
+					// Если пришел звук (не текст) — играем
+					if (ExpoPlayAudioStream && ExpoPlayAudioStream.playRaw) {
+						ExpoPlayAudioStream.playRaw(msg);
+						setStatus(`Прием звука...`);
+					}
+				});
+
 				s.bind(12345);
 				setUdpSocket(s);
-				return () => { if (s && s.close) s.close(); };
-			} catch (e) { console.log('Socket Init Error:', e); }
+				setStatus('Сокет готов!');
+			} catch (e: any) {
+				console.log('ОШИБКА СОКЕТА:', e);
+			}
 		}
+
+		return () => { if (udpSocket && udpSocket.close) udpSocket.close(); };
 	}, []);
-	// asdasdasdsad
-	// Функция прослушивания
+
+	// Функция проверки связи
+	const testConnection = () => {
+		// Если сокета нет, пробуем создать его "на лету"
+		let activeSocket = udpSocket;
+
+		if (!activeSocket && typeof createSocket === 'function') {
+			try {
+				activeSocket = createSocket({ type: 'udp4' });
+				activeSocket.bind(12345);
+				setUdpSocket(activeSocket);
+				console.log("СОКЕТ СОЗДАН ПРИ ПРОВЕРКЕ");
+			} catch (e) {
+				console.log("ОШИБКА ПРИ СОЗДАНИИ:", e);
+			}
+		}
+
+		if (activeSocket && targetIp) {
+			setStatus('Проверка...');
+			console.log("Шлем пинг на", targetIp);
+			activeSocket.send('CHECK_PING', 0, 10, 12345, targetIp, (err: any) => {
+				if (err) console.log("ОШИБКА UDP:", err);
+			});
+		} else {
+			setStatus('Ошибка: сокет null. Пересобери APK!');
+			console.log("КРИТИЧНО: createSocket is", typeof createSocket);
+		}
+	};
+
 	const playLast = async () => {
 		if (recorder.uri) {
 			setStatus('Воспроизведение...');
 			await player.replace(recorder.uri);
 			player.play();
-			setTimeout(() => {
-				setStatus('Готов');
-			}, 2000)
-		} else {
-			setStatus('Записей нет');
+			setTimeout(() => setStatus('Готов'), 2000);
 		}
 	};
 
@@ -65,94 +114,42 @@ export default function InfoScreen() {
 		}
 
 		try {
-			if (!recorder.isRecording) {
-				setIsRecording(true);
-				setStatus(ExpoPlayAudioStream ? 'В ЭФИРЕ' : 'ЗАПИСЬ (Expo Go)');
+			setIsRecording(true);
+			setStatus(ExpoPlayAudioStream ? 'В ЭФИРЕ' : 'ЗАПИСЬ (Expo Go)');
 
-				// В новых версиях expo-audio используем try-catch для подготовки
-				try {
-					await recorder.prepareToRecordAsync();
-				} catch (err) {
-					// Если уже подготовлен, просто игнорируем ошибку и идем дальше
-					console.log('Рекордер уже был готов');
-				}
-
-				recorder.record();
-			}
+			await recorder.prepareToRecordAsync();
+			recorder.record();
 
 			if (ExpoPlayAudioStream && udpSocket && targetIp) {
 				const stream = await ExpoPlayAudioStream.startRecording({
 					interval: 100,
 					onAudioData: (chunk: any) => {
-						udpSocket.send(chunk.data, 0, chunk.data.length, 12345, targetIp);
+						udpSocket.send(chunk.data, 0, chunk.data.length, 12345, targetIp, (err: any) => {
+							if (err) console.log("ОШИБКА UDP:", err);
+						});
 					},
 				});
 				stopStreamRef.current = stream;
 			}
 		} catch (e) {
-			console.error('Start Error:', e);
 			setStatus('Ошибка старта');
 			setIsRecording(false);
 		}
 	};
 
-
 	const stopTalk = async () => {
-		// Если статус записи false, значит мы даже не начинали из-за прав
 		if (!isRecording) return;
-
 		setIsRecording(false);
 		setStatus('Готов');
-
 		try {
-			// Проверяем, действительно ли рекордер записывает перед тем как стопать
-			if (recorder.isRecording) {
-				await recorder.stop();
-			}
-
+			if (recorder.isRecording) await recorder.stop();
 			if (stopStreamRef.current && stopStreamRef.current.stop) {
 				stopStreamRef.current.stop();
 				stopStreamRef.current = null;
 			}
-		} catch (e) {
-			console.log('Stop Error:', e);
-		}
+		} catch (e) { console.log('Stop Error:', e); }
 	};
-	useEffect(() => {
-		Audio.setAudioModeAsync({
-			allowsRecording: true,
-			playsInSilentMode: true,
-			shouldRouteThroughEarpiece: false,
-		});
 
-		if (TcpSocket && TcpSocket.createSocket) {
-			try {
-				const s = TcpSocket.createSocket({ type: 'udp4' });
-
-				// --- ПРИЕМ ДАННЫХ ---
-				s.on('message', (msg: string, rinfo: any) => {
-					console.log(`Получен пакет размером ${msg.length} от ${rinfo.address}`);
-					if (ExpoPlayAudioStream) {
-						try {
-							// Попробуй один из этих вариантов (зависит от точной версии):
-							if (ExpoPlayAudioStream.play) {
-								ExpoPlayAudioStream.play(msg);
-							} else if (ExpoPlayAudioStream.push) {
-								ExpoPlayAudioStream.push(msg);
-							}
-							setStatus(`Прием: ${rinfo.address}`);
-						} catch (err) {
-							console.error('Ошибка воспроизведения чанка:', err);
-						}
-					}
-				});
-
-				s.bind(12345);
-				setUdpSocket(s);
-				return () => { if (s && s.close) s.close(); };
-			} catch (e) { console.log('Socket Init Error:', e); }
-		}
-	}, []);
 	return (
 		<View style={{ flex: 1, backgroundColor: '#064e3b', padding: 20 }}>
 			<Stack.Screen options={{ title: 'Рация' }} />
@@ -167,6 +164,9 @@ export default function InfoScreen() {
 					keyboardType="numeric"
 					style={{ backgroundColor: '#047857', color: 'white', padding: 10, borderRadius: 10, marginTop: 15 }}
 				/>
+				<TouchableOpacity onPress={testConnection} style={{ marginTop: 10, padding: 8, backgroundColor: '#059669', borderRadius: 8, alignItems: 'center' }}>
+					<Text style={{ color: 'white' }}>Проверить связь</Text>
+				</TouchableOpacity>
 			</View>
 
 			<View style={{ flex: 1, justifyContent: 'center' }}>
@@ -186,19 +186,9 @@ export default function InfoScreen() {
 					</Text>
 				</TouchableOpacity>
 
-				{/* ВОТ ОНА — ВОЗВРАЩЕННАЯ КНОПКА */}
 				{recorder.uri && !isRecording && (
-					<TouchableOpacity
-						onPress={playLast}
-						style={{
-							marginTop: 40,
-							padding: 15,
-							backgroundColor: '#3b82f6',
-							borderRadius: 12,
-							alignItems: 'center'
-						}}
-					>
-						<Text style={{ color: 'white', fontWeight: '600' }}>▶ Прослушать запись</Text>
+					<TouchableOpacity onPress={playLast} style={{ marginTop: 40, padding: 15, backgroundColor: '#3b82f6', borderRadius: 12, alignItems: 'center' }}>
+						<Text style={{ color: 'white', fontWeight: '600' }}>▶ Прослушать последнюю запись</Text>
 					</TouchableOpacity>
 				)}
 			</View>
