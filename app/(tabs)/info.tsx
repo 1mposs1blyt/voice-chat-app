@@ -1,17 +1,20 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, FlatList, SafeAreaView } from 'react-native';
-import { RTCPeerConnection, mediaDevices, RTCSessionDescription, MediaStream } from 'react-native-webrtc';
+import { RTCPeerConnection, mediaDevices, RTCSessionDescription, RTCIceCandidate, MediaStream } from 'react-native-webrtc';
 import Zeroconf from 'react-native-zeroconf';
-
-import * as dgram from 'react-native-udp';
-
-
+import dgram from 'react-native-udp';
 import { Buffer } from 'buffer';
+import { Vibration } from 'react-native';
 
 const UDP_PORT = 12345;
 const SERVICE_TYPE = 'moto-intercom';
-
+let globalPcs: Record<string, RTCPeerConnection> = {};
+let isAppInitialized = false;
+let persistentSocket: any = null;
+let sdpBuffer: Record<string, string[]> = {};
 export default function InfoScreen() {
+	// 1. ОДНО объявление ID в корне компонента
+	const myId = useRef(`Biker-${Math.random().toString(36).substring(7)}`).current;
 	const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 	const [peers, setPeers] = useState<string[]>([]);
 	const [isTalking, setIsTalking] = useState(false);
@@ -21,116 +24,172 @@ export default function InfoScreen() {
 	const zeroconf = useRef(new Zeroconf());
 	const pcs = useRef<{ [key: string]: RTCPeerConnection }>({});
 
+
 	useEffect(() => {
+		if (isAppInitialized) return;
+		isAppInitialized = true;
 		initVoiceSystem();
-		return () => {
-			zeroconf.current.stop();
-			socket.current?.close();
-			Object.values(pcs.current).forEach(pc => pc.close());
-		};
+		// ВАЖНО: Не закрывайте сокет здесь для тестов в Expo
 	}, []);
 
-	const initVoiceSystem = async () => {
-		try {
-			// 1. Настройка микрофона с шумоподавлением для мотоцикла
-			const stream = await mediaDevices.getUserMedia({
-				audio: true, // Просто ставим true
-				video: false
-			});
-			stream.getAudioTracks()[0].enabled = false; // По умолчанию микрофон выключен (PTT)
-			setLocalStream(stream);
 
-			// 2. UDP Сокет для обмена сигналами напрямую
-			socket.current = (dgram as any).createSocket('udp4');
+	const createPeerConnection = (remoteIp: string, stream: MediaStream) => {
+		// const pc = new RTCPeerConnection({ iceServers: [] });
+		// const pc = new RTCPeerConnection({ iceServers: [] });
+		const pc = new RTCPeerConnection({
+			iceServers: [],
+			// @ts-ignore
+			iceTransportPolicy: 'all',
+			bundlePolicy: 'max-bundle',
+			rtcpMuxPolicy: 'require',
+		} as any);
+		pc.addEventListener('connectionstatechange', () => {
+			console.log('--- СТАТУС СОЕДИНЕНИЯ:', pc.connectionState);
+		});
 
-			socket.current.bind(UDP_PORT);
-			socket.current.on('message', (msg: Buffer, rinfo: any) => {
-				const data = JSON.parse(msg.toString());
-				handleSignaling(data, rinfo.address, stream);
-			});
+		pc.addEventListener('iceconnectionstatechange', () => {
+			console.log('--- ICE СТАТУС:', pc.iceConnectionState);
+		});
 
-			// 3. Поиск устройств в локальной сети (Wi-Fi/Hotspot)
-			setupDiscovery();
-			setStatus('В сети. Ищем участников...');
-		} catch (e) {
-			setStatus('Ошибка: проверьте разрешения');
-			console.error(e);
+		pc.addEventListener('track', (event) => {
+			console.log('!!! ПОТОК ПРИШЕЛ !!!');
+			Vibration.vibrate([100, 100, 100]); // Телефон будет вибрировать, когда звук физически дойдет
+		});
+		pc.addEventListener('icecandidate', (event: any) => {
+			if (event.candidate) {
+				sendSignal({ type: 'CANDIDATE', candidate: event.candidate }, remoteIp);
+			}
+		});
+
+		stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+		pc.addEventListener('track', (event) => {
+			console.log('!!! ПОЛУЧЕН ЗВУК ОТ:', remoteIp);
+		});
+
+		return pc;
+	};
+	const createConnection = async (remoteIp: string) => {
+		if (globalPcs[remoteIp] || !localStream) return;
+		const pc = createPeerConnection(remoteIp, localStream);
+		globalPcs[remoteIp] = pc;
+
+		const offer = await pc.createOffer({ offerToReceiveAudio: true });
+		await pc.setLocalDescription(offer);
+
+		// Разбиваем OFFER на строки и шлем каждую отдельно
+		const lines = offer.sdp.split('\n');
+		lines.forEach((line: any, index: number) => {
+			sendSignal({
+				type: 'SDP_PART',
+				line: line,
+				isLast: index === lines.length - 1,
+				sdpType: 'offer'
+			}, remoteIp);
+		});
+		console.log('--- OFFER ОТПРАВЛЕН ПО ЧАСТЯМ ---');
+	};
+	const handleSignaling = async (data: any, remoteIp: string, stream: MediaStream) => {
+		if (data.type === 'VIBRO') { Vibration.vibrate(50); return; }
+
+		if (data.type === 'SDP_PART') {
+			if (!sdpBuffer[remoteIp]) sdpBuffer[remoteIp] = [];
+			sdpBuffer[remoteIp].push(data.line);
+
+			if (data.isLast) {
+				const fullSdp = sdpBuffer[remoteIp].join('\n');
+				sdpBuffer[remoteIp] = []; // Чистим буфер
+
+				console.log(`--- СОБРАН ПОЛНЫЙ ${data.sdpType.toUpperCase()} ---`);
+
+				let pc = globalPcs[remoteIp];
+				if (!pc) {
+					pc = createPeerConnection(remoteIp, stream);
+					globalPcs[remoteIp] = pc;
+				}
+
+				if (data.sdpType === 'offer') {
+					await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: fullSdp }));
+					const answer = await pc.createAnswer();
+					await pc.setLocalDescription(answer);
+
+					// Отправляем ANSWER тоже по частям
+					answer.sdp.split('\n').forEach((line, index, arr) => {
+						sendSignal({ type: 'SDP_PART', line, isLast: index === arr.length - 1, sdpType: 'answer' }, remoteIp);
+					});
+				} else {
+					await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: fullSdp }));
+				}
+			}
+			return;
+		}
+
+		if (data.type === 'CANDIDATE') {
+			const pc = globalPcs[remoteIp];
+			if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
 		}
 	};
+	const initVoiceSystem = async () => {
+		try {
+			const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+			stream.getAudioTracks()[0].enabled = false;
+			setLocalStream(stream);
 
+			// Используем глобальную переменную, чтобы сокет не дох
+			if (!persistentSocket) {
+				persistentSocket = (dgram as any).createSocket('udp4');
+				persistentSocket.bind(UDP_PORT);
+				persistentSocket.on('message', (msg: any, rinfo: any) => {
+					const data = JSON.parse(msg.toString());
+					handleSignaling(data, rinfo.address, stream);
+				});
+				socket.current = persistentSocket;
+			}
+
+			setupDiscovery();
+			setStatus('Система стабильна');
+		} catch (e) {
+			isAppInitialized = false;
+			setStatus('Ошибка инициализации');
+		}
+	};
 	const setupDiscovery = () => {
-		const name = `Biker-${Math.random().toString(36).substring(7)}`;
-
-		// Вместо registerService используем publishService
-		zeroconf.current.publishService(SERVICE_TYPE, 'udp', 'local.', name, UDP_PORT);
-
-		// Начинаем сканирование других участников
+		zeroconf.current.publishService(SERVICE_TYPE, 'udp', 'local.', myId, UDP_PORT);
 		zeroconf.current.scan(SERVICE_TYPE, 'udp', 'local.');
 
 		zeroconf.current.on('resolved', (service) => {
-			if (service.addresses && service.addresses[0]) {
-				const ip = service.addresses[0];
-				if (!peers.includes(ip)) {
-					setPeers(prev => [...new Set([...prev, ip])]);
-					createConnection(ip);
-				}
+			const remoteIp = service.addresses?.find(ip => !ip.includes(':'));
+			if (!remoteIp || service.name === myId) return;
+
+			// КРИТИЧНО: Если мы уже знаем этот IP, выходим сразу
+			if (pcs.current[remoteIp]) return;
+
+			if (!peers.includes(remoteIp)) {
+				setPeers(prev => [...new Set([...prev, remoteIp])]);
+			}
+
+			if (myId < service.name) {
+				console.log('--- ЕДИНОЖДЫ ОТПРАВЛЯЮ OFFER ---', remoteIp);
+				createConnection(remoteIp);
 			}
 		});
 	};
-
-
-	const createConnection = async (remoteIp: string) => {
-		if (pcs.current[remoteIp]) return;
-
-		const pc = new RTCPeerConnection({ iceServers: [] });
-		pcs.current[remoteIp] = pc;
-
-		// Добавляем наш голос в поток для этого участника
-		localStream?.getTracks().forEach(track => pc.addTrack(track, localStream!));
-
-		const offer = await pc.createOffer({});
-		await pc.setLocalDescription(offer);
-
-		sendSignal({ type: 'OFFER', sdp: offer }, remoteIp);
-	};
-
-	const handleSignaling = async (data: any, remoteIp: string, stream: MediaStream) => {
-		let pc = pcs.current[remoteIp];
-
-		if (!pc) {
-			pc = new RTCPeerConnection({ iceServers: [] });
-			pcs.current[remoteIp] = pc;
-			stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-			// Исправлено: используем ontrack (все маленькими) или слушатель
-			pc.addEventListener('track', (event) => {
-				// Здесь логика получения звука от другого байкера
-				console.log('Получен звук от:', remoteIp);
-			});
-		}
-
-		if (data.type === 'OFFER') {
-			await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-			const answer = await pc.createAnswer();
-			await pc.setLocalDescription(answer);
-			sendSignal({ type: 'ANSWER', sdp: answer }, remoteIp);
-		} else if (data.type === 'ANSWER') {
-			await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-		}
-	};
-
 	const sendSignal = (data: any, ip: string) => {
+		if (!persistentSocket) return;
 		const message = JSON.stringify(data);
-		socket.current.send(message, 0, message.length, UDP_PORT, ip);
+		persistentSocket.send(message, 0, message.length, UDP_PORT, ip);
 	};
-
 	const toggleTalk = (active: boolean) => {
 		if (localStream) {
+			if (active) {
+				Vibration.vibrate(50); // Короткий вибро-отклик
+				// Отправляем сигнал другим, если нужно, чтобы у них тоже вибрировало
+				peers.forEach(ip => sendSignal({ type: 'VIBRO' }, ip));
+			}
 			localStream.getAudioTracks()[0].enabled = active;
 			setIsTalking(active);
 		}
 	};
-
 	return (
 		<SafeAreaView className="flex-1 bg-slate-950 p-6">
 			<View className="items-center mb-8">
@@ -140,7 +199,7 @@ export default function InfoScreen() {
 
 			<View className="flex-1 bg-slate-900/50 rounded-3xl p-4 mb-6 border border-slate-800">
 				<Text className="text-slate-500 font-semibold mb-4 uppercase text-xs tracking-widest">
-					Участники поблизости ({peers.length})
+					Участники ({peers.length})
 				</Text>
 				<FlatList
 					data={peers}
@@ -162,12 +221,8 @@ export default function InfoScreen() {
 					className={`w-48 h-48 rounded-full items-center justify-center border-8 
             ${isTalking ? 'bg-red-600 border-red-500 shadow-2xl shadow-red-500/50' : 'bg-slate-800 border-slate-700'}`}
 				>
-					<Text className="text-white text-4xl font-black">
-						{isTalking ? 'LIVE' : 'PTT'}
-					</Text>
-					<Text className="text-white/60 text-xs mt-2 font-bold uppercase tracking-tighter">
-						Push to talk
-					</Text>
+					<Text className="text-white text-4xl font-black">{isTalking ? 'LIVE' : 'PTT'}</Text>
+					<Text className="text-white/60 text-xs mt-2 font-bold uppercase tracking-tighter">Push to talk</Text>
 				</TouchableOpacity>
 			</View>
 		</SafeAreaView>
