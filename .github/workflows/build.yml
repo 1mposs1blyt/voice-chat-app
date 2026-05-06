@@ -51,7 +51,7 @@ jobs:
       - name: 🚀 Build Android
         run: |
           bun install -g eas-cli
-          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
+          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache --debug
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
