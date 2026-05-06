@@ -1,0 +1,430 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, FlatList, SafeAreaView, Button, Pressable } from 'react-native';
+import { RTCPeerConnection, mediaDevices, RTCSessionDescription, RTCIceCandidate, MediaStream } from 'react-native-webrtc';
+import Zeroconf from 'react-native-zeroconf';
+import dgram from 'react-native-udp';
+import { Vibration } from 'react-native';
+
+const UDP_PORT = 31245;
+
+const SERVICE_TYPE = 'moto-intercom';
+let globalPcs: Record<string, RTCPeerConnection> = {};
+let isAppInitialized = false;
+let persistentSocket: any = null;
+let sdpBuffer: Record<string, string[]> = {};
+
+export default function InfoScreen() {
+	// 1. ОДНО объявление ID в корне компонента
+	const myId = useRef(`Biker-${Math.random().toString(36).substring(7)}`).current;
+	const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+	const [peers, setPeers] = useState<string[]>([]);
+	const [isTalking, setIsTalking] = useState(false);
+	const [status, setStatus] = useState('Инициализация...');
+	const [isLocked, setIsLocked] = useState(false);
+	const socket = useRef<any>(null);
+	const zeroconf = useRef(new Zeroconf());
+	const pcs = useRef<{ [key: string]: RTCPeerConnection }>({});
+
+
+	useEffect(() => {
+		if (isAppInitialized) return;
+		isAppInitialized = true;
+		initVoiceSystem();
+		// ВАЖНО: Не закрывайте сокет здесь для тестов в Expo
+	}, []);
+
+	const resetSystem = () => {
+		isAppInitialized = false;
+		globalPcs = {};
+		sdpBuffer = {};
+		if (persistentSocket) {
+			persistentSocket.close();
+			persistentSocket = null;
+		}
+		setPeers([]);
+		setStatus('Система сброшена. Перезапуск...');
+		initVoiceSystem();
+	};
+	const createPeerConnection = (remoteIp: string, stream: MediaStream) => {
+		const pc = new RTCPeerConnection({
+			iceServers: [
+				{ urls: 'stun:://google.com' },
+				{ urls: 'stun:://google.com' },
+			],
+			// @ts-ignore
+			iceTransportPolicy: 'all',
+		} as any);
+
+		// ВАЖНО: Добавляем трек СРАЗУ
+		stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+		// Слушаем КАНДИДАТОВ (без них звука не будет)
+		pc.addEventListener('icecandidate', (event: any) => {
+			if (event.candidate) {
+				console.log('!!! ЛОКАЛЬНЫЙ КАНДИДАТ ГОТОВ !!!'); // Видишь это в логах?
+				sendSignal({ type: 'CANDIDATE', candidate: event.candidate }, remoteIp);
+			}
+		});
+		pc.addEventListener('iceconnectionstatechange', () => {
+			if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+				console.log('Связь потеряна, переподключение...');
+				delete globalPcs[remoteIp];
+				createConnection(remoteIp); // Пробуем еще раз
+			}
+		});
+
+		pc.addEventListener('track', (event) => {
+			console.log('!!! ПОТОК ПРИШЕЛ !!!');
+		});
+
+		return pc;
+	};
+	const createConnection = async (remoteIp: string) => {
+		if (globalPcs[remoteIp] || !localStream) return;
+		const pc = createPeerConnection(remoteIp, localStream);
+		globalPcs[remoteIp] = pc;
+		pc.addEventListener('track', (event) => {
+			console.log('!!! ТРЕК ПРИШЕЛ !!!');
+			// Каждые 2 секунды проверяем, идет ли по треку звук (уровень громкости)
+			setInterval(async () => {
+				const stats = await pc.getStats();
+				stats.forEach((report: { type: string; audioLevel: number; }) => {
+					if (report.type === 'media-source' && report.audioLevel > 0) {
+						console.log('ДАННЫЕ ЗВУКА ИДУТ! Уровень:', report.audioLevel);
+					}
+				});
+			}, 2000);
+		});
+		const offer = await pc.createOffer({ offerToReceiveAudio: true });
+		await pc.setLocalDescription(offer);
+
+		// Разбиваем OFFER на строки и шлем каждую отдельно
+		const lines = offer.sdp.split('\n');
+		lines.forEach((line: any, index: number) => {
+			sendSignal({
+				type: 'SDP_PART',
+				line: line,
+				isLast: index === lines.length - 1,
+				sdpType: 'offer'
+			}, remoteIp);
+		});
+		console.log('--- OFFER ОТПРАВЛЕН ПО ЧАСТЯМ ---');
+	};
+	const handleSignaling = async (data: any, remoteIp: string, stream: MediaStream) => {
+		// 1. Сразу получаем PC для этого адреса (если он уже был создан)
+		let pc = globalPcs[remoteIp];
+
+		if (data.type === 'VIBRO') { Vibration.vibrate(50); return; }
+
+		if (data.type === 'SDP_PART') {
+			if (!sdpBuffer[remoteIp]) sdpBuffer[remoteIp] = [];
+			sdpBuffer[remoteIp].push(data.line);
+
+			if (data.isLast) {
+				const fullSdp = sdpBuffer[remoteIp].join('\n');
+				sdpBuffer[remoteIp] = [];
+
+				console.log(`--- СОБРАН ПОЛНЫЙ ${data.sdpType.toUpperCase()} ---`);
+
+				// Если пришел OFFER, а PC еще нет — создаем
+				if (!pc) {
+					pc = createPeerConnection(remoteIp, stream);
+					globalPcs[remoteIp] = pc;
+				}
+
+				if (data.sdpType === 'offer') {
+					await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: fullSdp }));
+					const answer = await pc.createAnswer();
+					await pc.setLocalDescription(answer);
+
+					answer.sdp.split('\n').forEach((line: any, index: number, arr: string | any[]) => {
+						sendSignal({ type: 'SDP_PART', line, isLast: index === arr.length - 1, sdpType: 'answer' }, remoteIp);
+					});
+				} else {
+					await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: fullSdp }));
+				}
+			}
+			return;
+		}
+
+		// 2. Теперь блок CANDIDATE видит переменную pc
+		if (data.type === 'CANDIDATE') {
+			if (pc && data.candidate) {
+				try {
+					// Явно создаем объект кандидата
+					const iceCandidate = new RTCIceCandidate(data.candidate);
+					await pc.addIceCandidate(iceCandidate);
+					console.log('--- КАНДИДАТ УСПЕШНО ВШИТ ---');
+				} catch (e) {
+					console.log('Ошибка ICE:', e);
+				}
+			}
+		}
+
+
+	};
+	const initVoiceSystem = async () => {
+		try {
+			// 1. Сначала микрофон
+			const stream = await mediaDevices.getUserMedia({ audio: true, video: false });
+			setLocalStream(stream);
+
+			// 2. Настройка UDP сокета (ВСТАВЛЯЙ СЮДА)
+			if (!persistentSocket) { // Проверка, чтобы не плодить сокеты
+				try {
+					persistentSocket = (dgram as any).createSocket('udp4');
+
+					persistentSocket.on('error', (err: any) => {
+						console.log('КРИТИЧЕСКАЯ ОШИБКА СОКЕТА:', err);
+						// Если порт занят, сбрасываем инициализацию, чтобы можно было нажать Reset
+						isAppInitialized = false;
+					});
+
+					persistentSocket.on('message', (msg: any, rinfo: any) => {
+						try {
+							const data = JSON.parse(msg.toString());
+							handleSignaling(data, rinfo.address, stream);
+						} catch (e) {
+							console.log('UDP Parse Error');
+						}
+					});
+
+					persistentSocket.bind(UDP_PORT, () => {
+						console.log(`Сокет успешно привязан к порту ${UDP_PORT}`);
+					});
+
+					socket.current = persistentSocket;
+				} catch (e) {
+					console.log('Не удалось создать сокет:', e);
+					isAppInitialized = false;
+				}
+			}
+
+			// 3. Поиск устройств
+			setupDiscovery();
+			setStatus('Система готова');
+		} catch (e) {
+			setStatus('Ошибка микрофона');
+			isAppInitialized = false;
+		}
+	};
+
+	const setupDiscovery = () => {
+		zeroconf.current.publishService(SERVICE_TYPE, 'udp', 'local.', myId, UDP_PORT);
+		zeroconf.current.scan(SERVICE_TYPE, 'udp', 'local.');
+		setInterval(() => {
+			zeroconf.current.stop();
+			zeroconf.current.scan(SERVICE_TYPE, 'udp', 'local.');
+		}, 30000);
+		zeroconf.current.on('resolved', (service) => {
+
+			// const remoteIp = service.addresses?.find(ip => !ip.includes(':'));
+			const remoteIp = service.addresses?.find(ip => ip.includes('.') && !ip.includes(':'));
+			if (!remoteIp || service.name === myId) return;
+
+			// КРИТИЧНО: Если мы уже знаем этот IP, выходим сразу
+			if (pcs.current[remoteIp]) return;
+
+			if (!peers.includes(remoteIp)) {
+				setPeers(prev => [...new Set([...prev, remoteIp])]);
+			}
+
+			if (myId < service.name) {
+				console.log('--- ЕДИНОЖДЫ ОТПРАВЛЯЮ OFFER ---', remoteIp);
+				createConnection(remoteIp);
+			}
+		});
+	};
+	const sendSignal = (data: any, ip: string) => {
+		if (!persistentSocket) return;
+		const message = JSON.stringify(data);
+		persistentSocket.send(message, 0, message.length, UDP_PORT, ip);
+	};
+	const toggleVoice = (active: boolean, forceToggle = false) => {
+		if (!localStream) return;
+		if (localStream) {
+			const track = localStream.getAudioTracks()[0];
+			// "Передергиваем" трек, чтобы разбудить систему
+			track.enabled = false;
+			setTimeout(() => {
+				track.enabled = active;
+				console.log('Track active:', track.enabled);
+			}, 10);
+		}
+		// Если мы нажали коротко (Toggle)
+		if (forceToggle) {
+			const newLockedState = !isLocked;
+			setIsLocked(newLockedState);
+			localStream.getAudioTracks()[0].enabled = newLockedState;
+			setIsTalking(newLockedState);
+			if (newLockedState) {
+				Vibration.vibrate([100, 50, 100]); // Особая вибрация для фиксации
+				peers.forEach(ip => sendSignal({ type: 'VIBRO' }, ip));
+			}
+			return;
+		}
+
+		// Если работаем в режиме PTT (нажал-держи)
+		// Но только если микрофон не заблокирован "вкл"
+		if (!isLocked) {
+			localStream.getAudioTracks()[0].enabled = active;
+			setIsTalking(active);
+			if (active) {
+				Vibration.vibrate(50);
+				peers.forEach(ip => sendSignal({ type: 'VIBRO' }, ip));
+			}
+		}
+	};
+	return (
+		<SafeAreaView style={styles.container}>
+			{/* Заголовок */}
+			<View style={styles.header}>
+				<Text style={styles.title}>Intercom</Text>
+				<Text style={styles.status}>{status}</Text>
+			</View>
+
+			{/* Список участников */}
+			<View style={styles.listContainer}>
+				<Text style={styles.listTitle}>
+					УЧАСТНИКИ ({peers.length})
+				</Text>
+				<FlatList
+					data={peers}
+					keyExtractor={item => item}
+					renderItem={({ item }) => (
+						<View style={styles.peerItem}>
+							<View style={styles.onlineDot} />
+							<Text style={styles.peerText}>Biker @ {item}</Text>
+						</View>
+					)}
+				/>
+			</View>
+
+			{/* Управление */}
+			<View style={styles.controls}>
+				<Pressable
+					// Режим "Нажал-Держи"
+					onPressIn={() => toggleVoice(true)}
+					onPressOut={() => toggleVoice(false)}
+					// Режим "Короткий клик для фиксации"
+					onLongPress={() => { }} // Чтобы не мешал
+					onPress={() => toggleVoice(false, true)}
+
+					style={({ pressed }) => [
+						styles.pttButton,
+						{
+							backgroundColor: isLocked || pressed ? '#dc2626' : '#1e293b',
+							borderColor: isLocked ? '#f87171' : (pressed ? '#ef4444' : '#334155'),
+							borderWidth: isLocked ? 12 : 8, // Делаем ободок толще, если залочено
+						}
+					]}
+				>
+					<Text style={styles.pttText}>
+						{isTalking ? 'LIVE' : 'PTT'}
+					</Text>
+					<Text style={styles.pttSubtext}>
+						{isLocked ? 'MIC LOCKED ON' : 'Hold to talk / Click to lock'}
+					</Text>
+				</Pressable>
+
+
+				<View style={styles.footerButtons}>
+					<Button onPress={resetSystem} title="Reset System" color="#64748b" />
+				</View>
+			</View>
+		</SafeAreaView>
+	);
+}
+const styles = StyleSheet.create({
+	container: {
+		flex: 1,
+		backgroundColor: '#020617', // slate-950
+		padding: 24,
+	},
+	header: {
+		alignItems: 'center',
+		marginBottom: 32,
+		marginTop: 20,
+	},
+	title: {
+		color: '#ffffff',
+		fontSize: 32,
+		fontWeight: 'bold',
+	},
+	status: {
+		color: '#94a3b8', // slate-400
+		marginTop: 8,
+	},
+	listContainer: {
+		flex: 1,
+		backgroundColor: 'rgba(15, 23, 42, 0.5)', // slate-900/50
+		borderRadius: 24,
+		padding: 20,
+		marginBottom: 24,
+		borderWidth: 1,
+		borderColor: '#1e293b', // slate-800
+	},
+	listTitle: {
+		color: '#64748b', // slate-500
+		fontSize: 12,
+		fontWeight: 'bold',
+		textTransform: 'uppercase',
+		letterSpacing: 1.5,
+		marginBottom: 16,
+	},
+	peerItem: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		backgroundColor: 'rgba(30, 41, 59, 0.5)', // slate-800/50
+		padding: 14,
+		borderRadius: 12,
+		marginBottom: 10,
+		borderWidth: 1,
+		borderColor: 'rgba(51, 65, 85, 0.5)', // slate-700/50
+	},
+	onlineDot: {
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+		backgroundColor: '#10b981', // emerald-500
+		marginRight: 12,
+	},
+	peerText: {
+		color: '#e2e8f0', // slate-200
+		fontWeight: '500',
+	},
+	controls: {
+		alignItems: 'center',
+		justifyContent: 'center',
+		paddingBottom: 20,
+	},
+	pttButton: {
+		width: 190,
+		height: 190,
+		borderRadius: 95,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: 8,
+		elevation: 10, // Тень для Android
+		shadowColor: '#ef4444', // Тень для iOS
+		shadowOffset: { width: 0, height: 0 },
+		shadowOpacity: 0.5,
+		shadowRadius: 20,
+	},
+	pttText: {
+		color: '#ffffff',
+		fontSize: 36,
+		fontWeight: '900',
+	},
+	pttSubtext: {
+		color: 'rgba(255, 255, 255, 0.6)',
+		fontSize: 10,
+		fontWeight: 'bold',
+		textTransform: 'uppercase',
+		marginTop: 4,
+	},
+	footerButtons: {
+		marginTop: 30,
+		width: '100%',
+	}
+});

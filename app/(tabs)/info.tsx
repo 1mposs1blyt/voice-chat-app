@@ -158,6 +158,8 @@ export default function InfoScreen() {
 		zeroconf.current.scan(SERVICE_TYPE, 'udp', 'local.');
 
 		zeroconf.current.on('resolved', (service) => {
+			console.log('Найден сервис:', service.name, 'IP:', service.addresses);
+
 			const remoteIp = service.addresses?.find(ip => !ip.includes(':'));
 			if (!remoteIp || service.name === myId) return;
 
