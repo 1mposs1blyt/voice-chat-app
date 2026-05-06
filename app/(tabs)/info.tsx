@@ -114,7 +114,7 @@ export default function InfoScreen() {
 					await pc.setLocalDescription(answer);
 
 					// Отправляем ANSWER тоже по частям
-					answer.sdp.split('\n').forEach((line, index, arr) => {
+					answer.sdp.split('\n').forEach((line: any, index: number, arr: string | any[]) => {
 						sendSignal({ type: 'SDP_PART', line, isLast: index === arr.length - 1, sdpType: 'answer' }, remoteIp);
 					});
 				} else {
