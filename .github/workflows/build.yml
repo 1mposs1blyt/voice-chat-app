@@ -54,6 +54,7 @@ jobs:
           # Используем профиль из выбранного при запуске
           eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
+          NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
