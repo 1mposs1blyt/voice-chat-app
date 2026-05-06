@@ -47,8 +47,12 @@
             "minSdkVersion": 24,
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0",
-            "extraProguardRules": "-keep class com.oney.WebRTCModule.** { *; }"
+            "kotlinVersion": "1.9.24",
+            "packagingOptions": {
+              "pickFirst": [
+                "**/libc++_shared.so"
+              ]
+            }
           }
         }
       ]
