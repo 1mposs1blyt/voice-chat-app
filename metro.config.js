@@ -1,12 +1,8 @@
-// Learn more https://docs.expo.io/guides/customizing-metro
-const { getDefaultConfig } = require('expo/metro-config');
+// const { getDefaultConfig } = require("expo/metro-config");
+// const { withNativeWind } = require("nativewind/metro"); // Убрали -config
 
-  const { withNativeWind } = require("nativewind/metro");
+// const config = getDefaultConfig(__dirname);
 
-
-/** @type {import('expo/metro-config').MetroConfig} */
-// eslint-disable-next-line no-undef
-const config = getDefaultConfig(__dirname);
-
-
-  module.exports = withNativeWind(config, { input: "./global.css" });
+// module.exports = withNativeWind(config, { input: "./global.css" });
+const { getDefaultConfig } = require("expo/metro-config");
+module.exports = getDefaultConfig(__dirname);
