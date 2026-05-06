@@ -49,8 +49,10 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          # Подавляем конфликты Kotlin и просим подробности
-          GRADLE_OPTS: "-Dorg.gradle.console=plain -Pkotlin.plugin.suppressKotlinVersionCompatibilityCheck=true"
+          # Правильный способ передать флаг подавления проверки Kotlin:
+          ORG_GRADLE_PROJECT_kotlin.plugin.suppressKotlinVersionCompatibilityCheck: "true"
+          # Настройки памяти для стабильности
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
 
       - name: 📁 Upload
         uses: actions/upload-artifact@v4
