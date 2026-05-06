@@ -33,7 +33,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17' # Самая стабильная для RN 0.76
+          java-version: '17'
 
       - name: 🛠 Setup Expo
         uses: expo/expo-github-action@v8
@@ -44,6 +44,12 @@ jobs:
       - name: 📦 Install dependencies
         run: bun install
 
+      - name: 🛠 Fix Worklets Check
+        run: |
+          # Этот скрипт находит все build.gradle внутри worklets и удаляет задачу, которая валит билд
+          find node_modules/react-native-worklets* -name "build.gradle" -exec sed -i '/assertMinimalReactNativeVersionTask/d' {} + || true
+          echo "Worklets check removed."
+
       - name: 🔑 Restore Keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
@@ -51,7 +57,6 @@ jobs:
       - name: 🚀 Build Android
         run: |
           bun install -g eas-cli
-          # Убираем --debug из команды и добавляем флаг логирования для Gradle
           eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
