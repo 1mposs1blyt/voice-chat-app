@@ -1,8 +1,7 @@
-// const { getDefaultConfig } = require("expo/metro-config");
-// const { withNativeWind } = require("nativewind/metro"); // Убрали -config
-
-// const config = getDefaultConfig(__dirname);
-
-// module.exports = withNativeWind(config, { input: "./global.css" });
 const { getDefaultConfig } = require("expo/metro-config");
-module.exports = getDefaultConfig(__dirname);
+// Пробуем импортировать из dist напрямую, если обычный путь не пашет
+const { withNativeWind } = require("nativewind/dist/metro"); 
+
+const config = getDefaultConfig(__dirname);
+
+module.exports = withNativeWind(config, { input: "./global.css" });
