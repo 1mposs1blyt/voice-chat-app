@@ -48,17 +48,18 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
 
-      - name: 🚀 Build Android
+      - name: 🚀 Build Android      - name: 🚀 Build Android
         run: |
           bun install -g eas-cli
-          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache --debug
+          # Убираем --debug из команды и добавляем флаг логирования для Gradle
+          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
+          GRADLE_OPTS: "-Dorg.gradle.console=plain"
       - name: 📁 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
