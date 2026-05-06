@@ -30,10 +30,10 @@ jobs:
       - name: 📦 Install
         run: bun install
 
-      - name: 🛠 Fix Worklets & Kotlin
+      - name: 🛠 Fix Worklets
         run: |
-          find node_modules/react-native-worklets* -name "build.gradle" -exec sed -i '/assertMinimalReactNativeVersionTask/d' {} + || true
-          echo "Fixes applied"
+          # Вырезаем проверку версии ворклетов, если она осталась
+          find node_modules -name "build.gradle" -exec sed -i '/assertMinimalReactNativeVersionTask/d' {} + || true
 
       - name: 🔑 Key
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
@@ -41,6 +41,7 @@ jobs:
       - name: 🚀 Build
         run: |
           bun install -g eas-cli
+          # Добавляем --verbose для отладки
           eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
@@ -48,7 +49,7 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          # Магия против ошибки компилятора Kotlin:
+          # Подавляем конфликты Kotlin и просим подробности
           GRADLE_OPTS: "-Dorg.gradle.console=plain -Pkotlin.plugin.suppressKotlinVersionCompatibilityCheck=true"
 
       - name: 📁 Upload
