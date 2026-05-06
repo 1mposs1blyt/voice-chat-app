@@ -35,7 +35,8 @@
         "ACCESS_COARSE_LOCATION",
         "NEARBY_WIFI_DEVICES"
       ],
-      "package": "com.anonymous.voicechatapp"
+      "package": "com.anonymous.voicechatapp",
+      "kotlinVersion": "2.0.0"
     },
     "plugins": [
       "expo-router",
