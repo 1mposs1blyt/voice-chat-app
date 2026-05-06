@@ -42,7 +42,7 @@ export default function InfoScreen() {
 			} catch (e) { console.log('Socket Init Error:', e); }
 		}
 	}, []);
-// asdasdasdsad
+	// asdasdasdsad
 	// Функция прослушивания
 	const playLast = async () => {
 		if (recorder.uri) {
