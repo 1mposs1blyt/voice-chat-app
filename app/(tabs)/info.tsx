@@ -3,7 +3,6 @@ import { View, Text, TouchableOpacity, FlatList, SafeAreaView } from 'react-nati
 import { RTCPeerConnection, mediaDevices, RTCSessionDescription, RTCIceCandidate, MediaStream } from 'react-native-webrtc';
 import Zeroconf from 'react-native-zeroconf';
 import dgram from 'react-native-udp';
-import { Buffer } from 'buffer';
 import { Vibration } from 'react-native';
 
 const UDP_PORT = 12345;
