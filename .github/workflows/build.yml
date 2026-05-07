@@ -5,7 +5,7 @@ on:
       ref:
         description: 'Ветка, тег или SHA коммита'
         required: true
-        default: 'main' # или 'master', укажи свою основную ветку
+        default: 'main'
       profile:
         description: 'Профиль сборки'
         required: true
@@ -32,7 +32,6 @@ jobs:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
         with:
-          # Используем значение из поля ввода
           ref: ${{ github.event.inputs.ref }}
 
       - name: 🟢 Setup Node.js
@@ -55,7 +54,7 @@ jobs:
       - name: 🏗 Setup Expo
         uses: expo/expo-github-action@v8
         with:
-          expo-version: latest
+          eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: 📦 Install dependencies
@@ -65,6 +64,8 @@ jobs:
           else
             npm install
           fi
+          # Удаляем типы, которые конфликтуют с SDK 52 (совет expo doctor)
+          npm uninstall @types/react-native --save-dev || true
 
       - name: 🛠 Fix Native Modules (Android)
         if: ${{ github.event.inputs.platform == 'android' }}
@@ -77,11 +78,10 @@ jobs:
 
       - name: 🚀 Build with EAS
         run: |
-          if [ "${{ github.event.inputs.package_manager }}" = "bun" ]; then
-            bun install -g eas-cli
-          else
-            npm install -g eas-cli
-          fi
+          # Флаг -P нужно передавать через переменную окружения специально для Gradle (не в GRADLE_OPTS!)
+          # Или добавить его в файл gradle.properties ниже
+          echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties || (mkdir -p android && echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties)
+          
           eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
@@ -89,7 +89,8 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain -Pkotlin.plugin.suppressKotlinVersionCompatibilityCheck=true"
+          # ТУТ ОСТАВЛЯЕМ ТОЛЬКО ПАРАМЕТРЫ ДЛЯ JAVA
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
 
       - name: 📁 Upload Artifacts
         uses: actions/upload-artifact@v4
