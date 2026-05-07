@@ -27,8 +27,7 @@ on:
 
 jobs:
   build:
-    runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' ||
-      'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
@@ -65,7 +64,7 @@ jobs:
           else
             npm install
           fi
-          # Удаляем типы, которые конфликтуют с SDK 52 (совет expo doctor)
+          # Удаляем конфликтующие типы по совету expo doctor
           npm uninstall @types/react-native --save-dev || true
 
       - name: 🛠 Fix Native Modules (Android)
@@ -75,32 +74,36 @@ jobs:
 
       - name: 🔑 Decode Keystore (Android)
         if: ${{ github.event.inputs.platform == 'android' }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode >
-          ./release.jks
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
 
       - name: 🚀 Build with EAS
         run: |
-          # 1. Принудительно создаем настройки для Gradle
+          # 1. Глобальный конфиг Gradle (самый приоритетный способ)
+          mkdir -p ~/.gradle
+          echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> ~/.gradle/gradle.properties
+          
+          # 2. Локальный конфиг (на случай, если EAS подхватит его при пребилде)
           mkdir -p android
           echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
           echo "android.useAndroidX=true" >> android/gradle.properties
           echo "android.enableJetifier=true" >> android/gradle.properties
 
-          # 2. Запускаем сборку
-          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
+          # 3. Запуск сборки
+          eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # 4. Прокидываем флаг как системную переменную проекта (System Property)
+          ORG_GRADLE_PROJECT_kotlin.plugin.suppressKotlinVersionCompatibilityCheck: "true"
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
 
       - name: 📁 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-${{
-            github.run_id }}
+          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-${{ github.run_id }}
           path: |
             **/*.apk
             **/*.aab
