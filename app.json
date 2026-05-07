@@ -42,6 +42,7 @@
     "plugins": [
       "expo-router",
       "expo-audio",
+      "react-native-webrtc",
       [
         "expo-build-properties",
         {
