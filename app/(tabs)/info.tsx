@@ -1,81 +1,48 @@
-import React, { useEffect, useState } from 'react';
-import { SafeAreaView, TouchableOpacity, Text, View, StyleSheet } from 'react-native';
-import { mediaDevices, MediaStream } from 'react-native-webrtc';
+import React from 'react';
+import { TouchableOpacity, Text, View } from 'react-native';
+import { Audio } from 'expo-av';
 
-export default function TestMicScreen() {
-	const [stream, setStream] = useState<MediaStream | null>(null);
-	const [isTesting, setIsTesting] = useState(false);
-	useEffect(() => {
-		console.log("Проверка наличия WebRTC модуля:", !!mediaDevices.getUserMedia);
-	}, []);
-	const startLocalTest = async () => {
+export default function InfoScreen() {
+	const testMic = async () => {
 		try {
-			console.log("--- ЗАПУСК ТЕСТА МИКРОФОНА ---");
+			console.log("Запрос прав...");
+			const { status } = await Audio.requestPermissionsAsync();
 
-			// 1. ПРИНУДИТЕЛЬНЫЙ ЗАПРОС
-			const localStream = await mediaDevices.getUserMedia({
-				audio: {
-					echoCancellation: false, // Для теста выключим, чтобы слышать себя
-					noiseSuppression: false,
-					autoGainControl: true,
-				} as any,
-				video: false
-			}) as MediaStream;
+			if (status === 'granted') {
+				console.log("Права получены! Включаю микрофон...");
+				await Audio.setAudioModeAsync({
+					allowsRecordingIOS: true,
+					playsInSilentModeIOS: true,
+				});
 
-			// 2. ВКЛЮЧАЕМ ТРЕК
-			localStream.getAudioTracks().forEach(t => {
-				t.enabled = true;
-				console.log("Трек активен:", t.label);
-			});
+				// Создаем пустую запись просто чтобы активировать железо
+				const recording = new Audio.Recording();
+				await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+				await recording.startAsync();
 
-			setStream(localStream);
-			setIsTesting(true);
+				alert("МИКРОФОН ВКЛЮЧЕН! Посмотри на индикатор (зеленая точка).");
 
-			console.log("!!! СЕЙЧАС ДОЛЖНА ПОЯВИТЬСЯ ЗЕЛЕНАЯ ТОЧКА !!!");
-			alert("Говорите в микрофон. Если точка есть, вы должны слышать себя (возможен свист!)");
-
-		} catch (e) {
-			console.error("ОШИБКА:", e);
-			alert("Не удалось запустить микрофон: " + e.message);
+				// Выключим через 5 секунд
+				setTimeout(async () => {
+					await recording.stopAndUnloadAsync();
+					console.log("Микрофон выключен");
+				}, 5000);
+			} else {
+				alert("Вы запретили доступ к микрофону");
+			}
+		} catch (err) {
+			console.error("Ошибка:", err);
 		}
-	};
-
-	const stopTest = () => {
-		if (stream) {
-			stream.getTracks().forEach(t => t.stop());
-			setStream(null);
-		}
-		setIsTesting(false);
 	};
 
 	return (
-		<SafeAreaView style={styles.container}>
-			<Text style={styles.title}>Тест микрофона</Text>
-
-			{!isTesting ? (
-				<TouchableOpacity style={styles.button} onPress={startLocalTest}>
-					<Text style={styles.btnText}>ВКЛЮЧИТЬ "ЭХО" ТЕСТ</Text>
-				</TouchableOpacity>
-			) : (
-				<TouchableOpacity style={[styles.button, { backgroundColor: 'red' }]} onPress={stopTest}>
-					<Text style={styles.btnText}>ВЫКЛЮЧИТЬ ТЕСТ</Text>
-				</TouchableOpacity>
-			)}
-
-			<View style={styles.info}>
-				<Text>Статус: {isTesting ? "ЗАПИСЬ ИДЕТ" : "ОЖИДАНИЕ"}</Text>
-				<Text style={{ marginTop: 10, color: 'gray' }}>
-					Если точка не горит — проверьте разрешения в настройках телефона вручную.
-				</Text>
-			</View>
-		</SafeAreaView>
+		<View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+			<TouchableOpacity
+				onPress={testMic}
+				style={{ padding: 20, backgroundColor: 'red', borderRadius: 10 }}
+			>
+				<Text style={{ color: 'white', fontWeight: 'bold' }}>ВКЛЮЧИТЬ МИКРОФОН (ТЕСТ)</Text>
+			</TouchableOpacity>
+		</View>
 	);
 }
-
-const styles = StyleSheet.create({
-	container: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-	title: { fontSize: 24, marginBottom: 40 },
-	button: { width: 250, height: 60, backgroundColor: '#4CAF50', justifyContent: 'center', alignItems: 'center', borderRadius: 30 },
-	btnText: { color: '#white', fontWeight: 'bold' },
-	info: { marginTop: 40, padding: 20, alignItems: 'center' }
-});

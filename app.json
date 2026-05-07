@@ -24,30 +24,26 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+      "package": "com.anonymous.voicechatapp",
       "permissions": [
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
+        "CAMERA",
         "INTERNET",
         "ACCESS_NETWORK_STATE",
-        "ACCESS_WIFI_STATE",
-        "CHANGE_WIFI_MULTICAST_STATE",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION",
-        "NEARBY_WIFI_DEVICES",
-        "MODIFY_AUDIO_SETTINGS",
-        "FOREGROUND_SERVICE_MICROPHONE"
-      ],
-      "package": "com.anonymous.voicechatapp"
+        "CHANGE_WIFI_MULTICAST_STATE"
+      ]
     },
     "plugins": [
       "expo-router",
       "expo-audio",
-      "react-native-webrtc",
       [
         "expo-build-properties",
         {
           "android": {
             "minSdkVersion": 24,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
             "kotlinVersion": "1.9.24"
           }
         }

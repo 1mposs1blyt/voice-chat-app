@@ -1,61 +1,99 @@
-name: Build Android (Manual)
+name: Build Mobile (Manual)
 on:
   workflow_dispatch:
     inputs:
       profile:
-        description: 'Профиль'
+        description: 'Профиль сборки'
         required: true
         default: 'development'
         type: choice
         options: [development, preview, production]
+      platform:
+        description: 'Платформа'
+        required: true
+        default: 'android'
+        type: choice
+        options: [android, ios]
+      package_manager:
+        description: 'Пакетный менеджер'
+        required: true
+        default: 'npm'
+        type: choice
+        options: [npm, bun]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Для iOS локальной сборки нужен macos-latest, для Android достаточно ubuntu
+    runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v1
-      - uses: actions/setup-node@v4
+
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: actions/setup-java@v4
+          cache: ${{ github.event.inputs.package_manager == 'npm' && 'npm' || '' }}
+
+      - name: 🚀 Setup Bun
+        if: ${{ github.event.inputs.package_manager == 'bun' }}
+        uses: oven-sh/setup-bun@v1
+
+      - name: ☕ Setup Java
+        if: ${{ github.event.inputs.platform == 'android' }}
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - uses: expo/expo-github-action@v8
+
+      - name: 🏗 Setup Expo
+        uses: expo/expo-github-action@v8
         with:
           expo-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
-      - name: 📦 Install
-        run: bun install
-
-      - name: 🛠 Fix Worklets
+      - name: 📦 Install dependencies
         run: |
-          # Вырезаем проверку версии ворклетов, если она осталась
+          if [ "${{ github.event.inputs.package_manager }}" = "bun" ]; then
+            bun install
+          else
+            npm install
+          fi
+
+      - name: 🛠 Fix Native Modules (Android)
+        if: ${{ github.event.inputs.platform == 'android' }}
+        run: |
           find node_modules -name "build.gradle" -exec sed -i '/assertMinimalReactNativeVersionTask/d' {} + || true
 
-      - name: 🔑 Key
+      - name: 🔑 Decode Keystore (Android)
+        if: ${{ github.event.inputs.platform == 'android' }}
         run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
 
-      - name: 🚀 Build
+      - name: 🚀 Build with EAS
         run: |
-          bun install -g eas-cli
-          # Добавляем --verbose для отладки
-          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
+          # Установка EAS зависит от менеджера
+          if [ "${{ github.event.inputs.package_manager }}" = "bun" ]; then
+            bun install -g eas-cli
+          else
+            npm install -g eas-cli
+          fi
+          
+          # Локальная сборка
+          eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          # Правильный способ передать флаг подавления проверки Kotlin:
-          ORG_GRADLE_PROJECT_kotlin.plugin.suppressKotlinVersionCompatibilityCheck: "true"
-          # Настройки памяти для стабильности
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain -Pkotlin.plugin.suppressKotlinVersionCompatibilityCheck=true"
 
-      - name: 📁 Upload
+      - name: 📁 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.profile }}-apk
-          path: ./*.apk
+          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-build
+          path: |
+            **/*.apk
+            **/*.aab
+            **/*.ipa
+            **/*.app
+          if-no-files-found: error
