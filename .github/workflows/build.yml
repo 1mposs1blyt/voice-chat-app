@@ -2,6 +2,10 @@ name: Build Mobile (Manual)
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: 'Ветка, тег или SHA коммита'
+        required: true
+        default: 'main' # или 'master', укажи свою основную ветку
       profile:
         description: 'Профиль сборки'
         required: true
@@ -23,10 +27,13 @@ on:
 
 jobs:
   build:
-    # Для iOS локальной сборки нужен macos-latest, для Android достаточно ubuntu
     runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - name: ⬇️ Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Используем значение из поля ввода
+          ref: ${{ github.event.inputs.ref }}
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
@@ -70,14 +77,11 @@ jobs:
 
       - name: 🚀 Build with EAS
         run: |
-          # Установка EAS зависит от менеджера
           if [ "${{ github.event.inputs.package_manager }}" = "bun" ]; then
             bun install -g eas-cli
           else
             npm install -g eas-cli
           fi
-          
-          # Локальная сборка
           eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
@@ -90,7 +94,7 @@ jobs:
       - name: 📁 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-build
+          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-${{ github.run_id }}
           path: |
             **/*.apk
             **/*.aab
