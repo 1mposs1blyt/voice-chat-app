@@ -3,31 +3,32 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: 'Ветка, тег или SHA коммита'
+        description: "Ветка, тег или SHA коммита"
         required: true
-        default: 'main'
+        default: "main"
       profile:
-        description: 'Профиль сборки'
+        description: "Профиль сборки"
         required: true
-        default: 'development'
+        default: "development"
         type: choice
-        options: [development, preview, production]
+        options: [ development, preview, production ]
       platform:
-        description: 'Платформа'
+        description: "Платформа"
         required: true
-        default: 'android'
+        default: "android"
         type: choice
-        options: [android, ios]
+        options: [ android, ios ]
       package_manager:
-        description: 'Пакетный менеджер'
+        description: "Пакетный менеджер"
         required: true
-        default: 'npm'
+        default: "npm"
         type: choice
-        options: [npm, bun]
+        options: [ npm, bun ]
 
 jobs:
   build:
-    runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.platform == 'ios' && 'macos-latest' ||
+      'ubuntu-latest' }}
     steps:
       - name: ⬇️ Checkout repository
         uses: actions/checkout@v4
@@ -48,8 +49,8 @@ jobs:
         if: ${{ github.event.inputs.platform == 'android' }}
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: "temurin"
+          java-version: "17"
 
       - name: 🏗 Setup Expo
         uses: expo/expo-github-action@v8
@@ -74,14 +75,15 @@ jobs:
 
       - name: 🔑 Decode Keystore (Android)
         if: ${{ github.event.inputs.platform == 'android' }}
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./release.jks
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode >
+          ./release.jks
 
       - name: 🚀 Build with EAS
         run: |
-          # Флаг -P нужно передавать через переменную окружения специально для Gradle (не в GRADLE_OPTS!)
-          # Или добавить его в файл gradle.properties ниже
-          echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties || (mkdir -p android && echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties)
-          
+          # Устанавливаем правильные зависимости перед билдом
+          npx expo install --check
+
+          # Запускаем сборку. Добавил --non-interactive и проверку на наличие папки android
           eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
@@ -89,13 +91,15 @@ jobs:
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          # ТУТ ОСТАВЛЯЕМ ТОЛЬКО ПАРАМЕТРЫ ДЛЯ JAVA
+          # Отключаем строгость доктора через переменную окружения (если нужно)
+          EXPO_NO_DOCTOR: "true"
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
 
       - name: 📁 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-${{ github.run_id }}
+          name: ${{ github.event.inputs.platform }}-${{ github.event.inputs.profile }}-${{
+            github.run_id }}
           path: |
             **/*.apk
             **/*.aab
