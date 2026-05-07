@@ -1,8 +1,7 @@
 {
   "cli": {
     "version": ">= 18.8.1",
-    "appVersionSource": "remote",
-    "packageManager": "npm" 
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -24,8 +23,5 @@
         "buildType": "apk"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }
