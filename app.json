@@ -41,6 +41,7 @@
         "expo-build-properties",
         {
           "android": {
+            "jdkVersion": 17,
             "kotlinVersion": "1.9.24",
             "extraGradleProperties": {
               "kotlin.plugin.suppressKotlinVersionCompatibilityCheck": "true"
