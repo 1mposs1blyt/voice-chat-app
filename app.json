@@ -33,7 +33,9 @@
         "CHANGE_WIFI_MULTICAST_STATE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "NEARBY_WIFI_DEVICES"
+        "NEARBY_WIFI_DEVICES",
+        "MODIFY_AUDIO_SETTINGS",
+        "FOREGROUND_SERVICE_MICROPHONE"
       ],
       "package": "com.anonymous.voicechatapp"
     },
