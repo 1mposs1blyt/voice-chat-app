@@ -80,19 +80,20 @@ jobs:
 
       - name: 🚀 Build with EAS
         run: |
-          # Устанавливаем правильные зависимости перед билдом
-          npx expo install --check
+          # 1. Принудительно создаем настройки для Gradle
+          mkdir -p android
+          echo "kotlin.plugin.suppressKotlinVersionCompatibilityCheck=true" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
 
-          # Запускаем сборку. Добавил --non-interactive и проверку на наличие папки android
-          eas build --platform ${{ github.event.inputs.platform }} --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
+          # 2. Запускаем сборку
+          eas build --platform android --local --profile ${{ github.event.inputs.profile }} --non-interactive --clear-cache
         env:
           NODE_ENV: ${{ github.event.inputs.profile }}
           EAS_BUILD_ANDROID_KEYSTORE_PATH: "./release.jks"
           EAS_BUILD_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           EAS_BUILD_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           EAS_BUILD_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          NODE_OPTIONS: "--max-old-space-size=4096"
-          EXPO_NO_DOCTOR: "true"
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -Dorg.gradle.console=plain"
 
       - name: 📁 Upload Artifacts
